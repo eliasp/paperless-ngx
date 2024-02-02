@@ -233,10 +233,16 @@ class Consumer(LoggingMixin):
         """
         Ensure all required directories exist before attempting to use them
         """
-        os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
-        os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
-        os.makedirs(settings.ORIGINALS_DIR, exist_ok=True)
-        os.makedirs(settings.ARCHIVE_DIR, exist_ok=True)
+        try:
+            os.makedirs(settings.SCRATCH_DIR, exist_ok=True)
+            os.makedirs(settings.THUMBNAIL_DIR, exist_ok=True)
+            os.makedirs(settings.ORIGINALS_DIR, exist_ok=True)
+            os.makedirs(settings.ARCHIVE_DIR, exist_ok=True)
+        except OSError as ose:
+            self._fail(
+                ConsumerStatusShortMessage.FAILED,
+                f"Not consuming {self.filename}: Failed to create directory: {ose}"
+            )
 
     def pre_check_asn_value(self):
         """

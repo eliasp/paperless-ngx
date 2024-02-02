@@ -116,50 +116,54 @@ def consume_file(
         WorkflowTriggerPlugin,
     ]
 
-    with ProgressManager(
-        overrides.filename or input_doc.original_file.name,
-        self.request.id,
-    ) as status_mgr, TemporaryDirectory(dir=settings.SCRATCH_DIR) as tmp_dir:
-        tmp_dir = Path(tmp_dir)
-        for plugin_class in plugins:
-            plugin_name = plugin_class.NAME
+    try:
+        with ProgressManager(
+            overrides.filename or input_doc.original_file.name,
+            self.request.id,
+        ) as status_mgr, TemporaryDirectory(dir=settings.SCRATCH_DIR) as tmp_dir:
+            tmp_dir = Path(tmp_dir)
+            for plugin_class in plugins:
+                plugin_name = plugin_class.NAME
 
-            plugin = plugin_class(
-                input_doc,
-                overrides,
-                status_mgr,
-                tmp_dir,
-                self.request.id,
-            )
+                plugin = plugin_class(
+                    input_doc,
+                    overrides,
+                    status_mgr,
+                    tmp_dir,
+                    self.request.id,
+                )
 
-            if not plugin.able_to_run:
-                logger.debug(f"Skipping plugin {plugin_name}")
-                continue
+                if not plugin.able_to_run:
+                    logger.debug(f"Skipping plugin {plugin_name}")
+                    continue
 
-            try:
-                logger.debug(f"Executing plugin {plugin_name}")
-                plugin.setup()
+                try:
+                    logger.debug(f"Executing plugin {plugin_name}")
+                    plugin.setup()
 
-                msg = plugin.run()
+                    msg = plugin.run()
 
-                if msg is not None:
-                    logger.info(f"{plugin_name} completed with: {msg}")
-                else:
-                    logger.info(f"{plugin_name} completed with no message")
+                    if msg is not None:
+                        logger.info(f"{plugin_name} completed with: {msg}")
+                    else:
+                        logger.info(f"{plugin_name} completed with no message")
 
-                overrides = plugin.metadata
+                    overrides = plugin.metadata
 
-            except StopConsumeTaskError as e:
-                logger.info(f"{plugin_name} requested task exit: {e.message}")
-                return e.message
+                except StopConsumeTaskError as e:
+                    logger.info(f"{plugin_name} requested task exit: {e.message}")
+                    return e.message
 
-            except Exception as e:
-                logger.exception(f"{plugin_name} failed: {e}")
-                status_mgr.send_progress(ProgressStatusOptions.FAILED, f"{e}", 100, 100)
-                raise
+                except Exception as e:
+                    logger.exception(f"{plugin_name} failed: {e}")
+                    status_mgr.send_progress(ProgressStatusOptions.FAILED, f"{e}", 100, 100)
+                    raise
 
-            finally:
-                plugin.cleanup()
+                finally:
+                    plugin.cleanup()
+    except OSError as ose:
+        logger.exception(f"Failed to create temporary directory within 'SCRATCH_DIR' ({settings.SCRATCH_DIR}): {ose}")
+        raise ConsumerError(ose.strerror)
 
     # continue with consumption if no barcode was found
     document = Consumer().try_consume_file(
